@@ -14,6 +14,7 @@ class DQN(nn.Module):
             `input_shape`: The shape of the input tensor (C, H, W).
             `n_actions`: The number of actions the agent can take.
         """
+        super(DQN, self).__init__()
         self.conv = nn.Sequential(
             nn.Conv2d(input_shape[0], 32, kernel_size=8, stride=4),
             nn.ReLU(),
