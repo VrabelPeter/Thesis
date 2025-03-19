@@ -5,19 +5,15 @@ from dataclasses import dataclass
 import numpy as np
 
 
-# Single frame: 84x84 = 7,056.
-# Grayscale frame requires 1 byte.
-# Four stacked frames: 84x84x4 = 28,224 bytes.
-# So single transition requires ~56 KB (checked in Jupyter Notebook).
 @dataclass
 class Experience:
     """A single experience tuple from the environment."""
 
-    state: np.ndarray  # \phi(s_t)
-    action: int  # a from A = {1, ..., K}
+    state: np.ndarray
+    action: int
     reward: float
     is_done: bool
-    new_state: np.ndarray  # \phi(s_{t+1})
+    new_state: np.ndarray
 
 
 class ExperienceReplay:
@@ -31,8 +27,8 @@ class ExperienceReplay:
         """
         assert size > 0, "Replay buffer size must be positive."
         self.size = size
-        self.memory = []  # Underlying list to store transitions.
-        self.position = 0  # Pointer to the next insertion point.
+        self.memory = []
+        self.position = 0
 
     def __len__(self) -> int:
         """Return the current size of the replay memory."""
