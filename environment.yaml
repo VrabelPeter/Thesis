@@ -1,0 +1,20 @@
+name: thesis
+channels:
+  - defaults
+dependencies:
+  - python=3.11
+  - ipykernel
+  - pip
+  - graphviz
+  - pip:
+      - gymnasium[other]
+      - gymnasium==1.1.1
+      - highway-env==1.10.1
+      - neptune-pytorch==2.0.0
+      - neptune==1.13.0
+      - numpy==2.2.4
+      - torch==2.6.0
+      - torchviz==0.0.3
+variables:
+  NEPTUNE_API_TOKEN: "your_api_token"
+  NEPTUNE_PROJECT: "your_workspace/your_project"
