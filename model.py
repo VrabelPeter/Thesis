@@ -42,5 +42,5 @@ class DQN(nn.Module):
             The output tensor of shape (B, n_actions)
             corresponding to the Q-values of the actions.
         """
-        xx = x / 255.0  # Rescale the input
+        xx = x / 255.0  # Rescale the input to [0, 1] for GPU
         return self.fc(self.conv(xx))
