@@ -116,7 +116,7 @@ class Agent:
         if is_done or is_trunc:  # end of episode
             done_reward = self.total_reward
             self._reset()
-        return done_reward, crashed
+        return done_reward, crashed, info
 
 
 def batch_to_tensors(
@@ -211,7 +211,7 @@ def record_time(timer):
 if __name__ == "__main__":
     # Assuming that credentials are set in the environment
     run = neptune.init_run(
-        tags=["Highway", "Thesis params"],  # TODO change this for each env & params
+        tags=["Highway", "Thesis params"],
         dependencies="environment.yaml",
         # Replace the `monitoring/<hash>/` pattern to make comparison easier
         monitoring_namespace="monitoring",
@@ -230,7 +230,15 @@ if __name__ == "__main__":
     env = make_env(
         parameters["env_name"],
         m=parameters["agent_history_length"],
+        render_mode="rgb_array",  # For video recording
     )
+    env = gym.wrappers.RecordVideo(
+        env,
+        video_folder="videos/training",
+        name_prefix="training",
+        episode_trigger=lambda x: x % 90 == 0,
+    )
+    env = gym.wrappers.RecordEpisodeStatistics(env)
     obs_shape = env.observation_space.shape
     n_actions = env.action_space.n
 
@@ -249,13 +257,6 @@ if __name__ == "__main__":
     optimizer = torch.optim.Adam(
         policy_net.parameters(), lr=parameters["learning_rate"]
     )
-    # optimizer = torch.optim.RMSprop(
-    #     policy_net.parameters(),
-    #     lr=my_parameters["learning_rate"],
-    #     momentum=my_parameters["gradient_momentum"],
-    #     alpha=my_parameters["squared_gradient_momentum"],
-    #     eps=my_parameters["min_squared_gradient"],
-    # )
 
     # Add Neptune logging
     npt_logger = NeptuneLogger(
@@ -287,7 +288,7 @@ if __name__ == "__main__":
         # 5. Initialize frame sequence and preprocessed sequence
         # 6. For each time step - done in `play_step` per `_reset`
         epsilon = calc_eps(frame_idx)
-        reward, crashed = agent.play_step(policy_net, device, epsilon)
+        reward, crashed, info = agent.play_step(policy_net, device, epsilon)
         if crashed:
             crash_c += 1
         if reward is not None:
@@ -323,6 +324,9 @@ if __name__ == "__main__":
             run[npt_logger.base_namespace]["metrics/total_crashes"].append(
                 crash_c, step=epoch
             )
+            run[npt_logger.base_namespace]["metrics/episode_info"].append(
+                info["episode"], step=epoch
+            )
             if best_mean_reward is None or best_mean_reward < mean_reward:
                 file_name = parameters["env_name"] + f"-best_{mean_reward:.0f}.dat"
                 # Save model params
@@ -350,6 +354,6 @@ if __name__ == "__main__":
 
     record_time(timer)
     run[npt_logger.base_namespace]["models"].upload_files("*.dat")
-    # TODO Save the latest model as well!
+    npt_logger.log_model("latest_model")  # TODO also locally?
     run.stop()
     env.close()
