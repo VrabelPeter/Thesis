@@ -6,7 +6,9 @@ gym.register_envs(highway_env)
 
 def make_env(env_name: str, m: int, **kwargs) -> gym.Env:
     config = {
-        "action": {"type": "DiscreteMetaAction"},
+        "action": {
+            "type": "DiscreteMetaAction",
+        },
         "observation": {
             "type": "GrayscaleObservation",
             "observation_shape": (128, 64),  # (W, H)
