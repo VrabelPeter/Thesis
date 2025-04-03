@@ -1,3 +1,4 @@
+import argparse
 import random
 import time
 import typing as tt
@@ -57,12 +58,11 @@ class Agent:
     def _reset(self):
         self.state, info = self.env.reset()
         self.total_reward = 0.0
-        self.crashed = info.get("crashed")
 
     @torch.no_grad()
     def play_step(
         self, net: DQN, device: torch.device, epsilon: float = 0.0
-    ) -> tt.Tuple[tt.Optional[float], bool]:
+    ) -> tt.Tuple[tt.Optional[float], dict]:
         """Execute one step of the agent in the environment.
 
         The agent selects and executes actions
@@ -73,9 +73,8 @@ class Agent:
             `epsilon`: The probability of selecting a random action.
 
         Returns:
-            A tuple containing the total reward and a boolean indicating
-            whether the agent crashed during the episode. If the episode
-            is not over, the total reward is `None`.
+            A tuple containing the total reward received if the episode is done,
+            and the information dictionary from the environment.
         """
         if random.random() < epsilon:
             # 7. With probability epsilon select a random action
@@ -97,9 +96,6 @@ class Agent:
         new_state, reward, is_done, is_trunc, info = self.env.step(action)
         self.total_reward += reward
 
-        if info.get("crashed"):
-            self.crashed = True
-
         # 10. Store transition (phi, a, r, phi') in D
         exp = Experience(
             state=self.state,
@@ -112,11 +108,10 @@ class Agent:
 
         self.state = new_state
         done_reward = None
-        crashed = self.crashed
         if is_done or is_trunc:  # end of episode
             done_reward = self.total_reward
             self._reset()
-        return done_reward, crashed, info
+        return done_reward, info
 
 
 def batch_to_tensors(
@@ -208,7 +203,87 @@ def record_time(timer):
     print(f"Total training time: {time.strftime('%Hh %Mm', time.gmtime(total_time))}")
 
 
+def log_metrics(
+    run: neptune.Run,
+    npt_logger: NeptuneLogger,
+    env: gym.Env,
+    frame_idx: int,
+    episode_c: int,
+    crash_c: int,
+    epsilon: float,
+    info: dict,
+):
+    """Log episode metrics to the console and Neptune.
+
+    Args:
+        run: The Neptune run object for logging.
+        npt_logger: The Neptune logger object.
+        env: The environment instance.
+        frame_idx: The current frame index.
+        episode_c: The current episode count.
+        crash_c: The current crash count.
+        epsilon: The current epsilon value.
+        info: The `info` dictionary from the environment step.
+    """
+    episode_info = info["episode"]
+    episode_return = episode_info["r"]  # Cumulative reward
+    episode_length = episode_info["l"]  # Episode length in steps
+    # Time elapsed since beginning of the episode
+    episode_time = episode_info["t"]
+    # Means of the last 100 episodes
+    mean_return_100 = np.mean(env.return_queue)
+    mean_length_100 = np.mean(env.length_queue)
+    mean_time_100 = np.mean(env.time_queue)
+    assert episode_c > 0, "Episode count must be greater than 0."
+    crash_rate = crash_c / episode_c
+    assert episode_time > 0, "Episode time must be greater than 0."
+    speed = episode_length / episode_time
+
+    print(
+        f"{frame_idx}: done {episode_c} games, "
+        f"mean reward {mean_return_100:.3f}, "
+        f"eps {epsilon:.2f}, "
+        f"speed {speed:.2f} f/s,",
+        f"crashes per episode {crash_rate:.2f}",
+    )
+
+    run[npt_logger.base_namespace]["metrics"].append(
+        {
+            "epsilon": epsilon,
+            "total_crashes": crash_c,
+            "crash_rate": crash_rate,
+        }
+    )
+    run[npt_logger.base_namespace]["metrics/means_100"].append(
+        {
+            "return": mean_return_100,
+            "length": mean_length_100,
+            "time": mean_time_100,
+        },
+        step=episode_c,
+    )
+    run[npt_logger.base_namespace]["metrics/episode"].append(
+        {
+            "return": episode_return,
+            "length": episode_length,
+            "time": episode_time,
+            "crashed": info["crashed"],
+            "speed": speed,
+        },
+        step=episode_c,
+    )
+
+
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser("Train DQN agent")
+    parser.add_argument(
+        "--record",
+        type=str,
+        help="Record video of the training to the specified folder",
+        required=False,
+    )
+    args = parser.parse_args()
+
     # Assuming that credentials are set in the environment
     run = neptune.init_run(
         tags=["Highway", "Thesis params"],
@@ -227,18 +302,23 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: '{device}'")
 
+    # For video recording, otherwise None
+    render_mode = "rgb_array" if args.record else None
     env = make_env(
         parameters["env_name"],
         m=parameters["agent_history_length"],
-        render_mode="rgb_array",  # For video recording
+        render_mode=render_mode,
     )
-    env = gym.wrappers.RecordVideo(
-        env,
-        video_folder="videos/training",
-        name_prefix="training",
-        episode_trigger=lambda x: x % 90 == 0,
-    )
-    env = gym.wrappers.RecordEpisodeStatistics(env)
+    if args.record:
+        print(f"Recording videos to {args.record}")
+        env = gym.wrappers.RecordVideo(
+            env,
+            video_folder=args.record,
+            name_prefix="training",
+            episode_trigger=lambda x: x % 90 == 0,
+        )
+    env = gym.wrappers.RecordEpisodeStatistics(env, buffer_length=100)
+
     obs_shape = env.observation_space.shape
     n_actions = env.action_space.n
 
@@ -262,11 +342,11 @@ if __name__ == "__main__":
     npt_logger = NeptuneLogger(
         run=run,
         model=policy_net,
-        log_model_diagram=True,
-        log_gradients=True,
-        log_parameters=True,
-        # FIXME underneath is maybe too high?
-        log_freq=500,  # Fixed the error with time stamps being too close
+        # log_model_diagram=True,
+        # log_gradients=True,
+        # log_parameters=True,
+        # # FIXME underneath is maybe too high?
+        # log_freq=500,  # Fixed the error with time stamps being too close
     )
     run[npt_logger.base_namespace]["hyperparameters"] = stringify_unsupported(
         parameters
@@ -274,12 +354,10 @@ if __name__ == "__main__":
 
     agent = Agent(env, replay_memory)
 
-    total_rewards = []
+    episode_c = 0
     crash_c = 0
     frame_idx = 0
-    ts_frame = 0
-    ts = time.time()
-    timer = time.time()  # For measuring total training time
+    total_training_timer = time.time()
     best_mean_reward = None
 
     # 4. For each episode
@@ -288,55 +366,33 @@ if __name__ == "__main__":
         # 5. Initialize frame sequence and preprocessed sequence
         # 6. For each time step - done in `play_step` per `_reset`
         epsilon = calc_eps(frame_idx)
-        reward, crashed, info = agent.play_step(policy_net, device, epsilon)
-        if crashed:
-            crash_c += 1
+        reward, info = agent.play_step(policy_net, device, epsilon)
+        if info["crashed"]:
+            crash_c += 1  # Unsuccessful episode
         if reward is not None:
-            # Report progress at the end of the episode
-            total_rewards.append(reward)
-            speed = (frame_idx - ts_frame) / (time.time() - ts)
-            ts_frame = frame_idx
-            ts = time.time()
-            # Mean reward of the last 100 episodes
-            mean_reward = np.mean(total_rewards[-100:])
-            epoch = len(total_rewards)
-            crash_rate = crash_c / epoch
-            print(
-                f"{frame_idx}: done {epoch} games, "
-                f"mean reward {mean_reward:.3f}, eps {epsilon:.2f}, "
-                f"speed {speed:.2f} f/s,",
-                f"crashes per episode {crash_rate:.2f}",
+            episode_c += 1  # End of episode
+            # Report progress
+            log_metrics(
+                run,
+                npt_logger,
+                env,
+                frame_idx,
+                episode_c,
+                crash_c,
+                epsilon,
+                info,
             )
-            run[npt_logger.base_namespace]["metrics/epsilon"].append(
-                epsilon, step=epoch
-            )
-            run[npt_logger.base_namespace]["metrics/speed"].append(speed, step=epoch)
-            run[npt_logger.base_namespace]["metrics/reward_100"].append(
-                mean_reward, step=epoch
-            )
-            run[npt_logger.base_namespace]["metrics/reward"].append(reward, step=epoch)
-            run[npt_logger.base_namespace]["metrics/crash_rate"].append(
-                crash_rate, step=epoch
-            )
-            run[npt_logger.base_namespace]["metrics/crashed"].append(
-                float(crashed), step=epoch
-            )
-            run[npt_logger.base_namespace]["metrics/total_crashes"].append(
-                crash_c, step=epoch
-            )
-            run[npt_logger.base_namespace]["metrics/episode_info"].append(
-                info["episode"], step=epoch
-            )
-            if best_mean_reward is None or best_mean_reward < mean_reward:
-                file_name = parameters["env_name"] + f"-best_{mean_reward:.0f}.dat"
+            mean_return_100 = np.mean(env.return_queue)
+            if best_mean_reward is None or best_mean_reward < mean_return_100:
+                file_name = parameters["env_name"] + f"-best_{mean_return_100:.0f}.dat"
                 # Save model params
                 torch.save(policy_net.state_dict(), file_name)
                 if best_mean_reward is not None:
                     print(
                         f"Best mean reward updated "
-                        f"{best_mean_reward:.3f} -> {mean_reward:.3f}"
+                        f"{best_mean_reward:.3f} -> {mean_return_100:.3f}"
                     )
-                    best_mean_reward = mean_reward
+                    best_mean_reward = mean_return_100
         if len(replay_memory) < parameters["replay_start_size"]:
             continue
         # 14. Every C steps reset \theta' = \theta.
@@ -352,7 +408,7 @@ if __name__ == "__main__":
         loss_t.backward()
         optimizer.step()
 
-    record_time(timer)
+    record_time(total_training_timer)
     run[npt_logger.base_namespace]["models"].upload_files("*.dat")
     npt_logger.log_model("latest_model")  # TODO also locally?
     run.stop()
