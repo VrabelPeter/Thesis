@@ -1,7 +1,4 @@
 import argparse
-import base64
-import time
-from pathlib import Path
 
 import gymnasium as gym
 import highway_env
@@ -17,7 +14,10 @@ gym.register_envs(highway_env)
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "-m", "--model", required=True, help="The path to the model to load."
+        "-m",
+        "--model",
+        required=True,
+        help="The path to the model to load.",
     )
     parser.add_argument(
         "-r",
@@ -53,8 +53,8 @@ if __name__ == "__main__":
         obs, info = env.reset()
         episode_reward = 0.0
         episode_steps = 0
-        episode_collision = False
-        done = False
+        episode_collision = info.get("crashed", False)
+        done = episode_collision
         while not done and total_steps < 10_000:
             state_v = torch.tensor(np.expand_dims(obs, axis=0))
             with torch.no_grad():
@@ -78,7 +78,6 @@ if __name__ == "__main__":
         # Calculate average return
         avg_return = np.mean(returns)
         episode_count += 1
-        # Log episode stats
         print(
             f"Episode {episode_count}: "
             f"Steps: {episode_steps}, "
