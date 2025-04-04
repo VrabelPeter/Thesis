@@ -283,7 +283,6 @@ if __name__ == "__main__":
         required=False,
     )
     args = parser.parse_args()
-
     # Assuming that credentials are set in the environment
     run = neptune.init_run(
         tags=["Highway", "Thesis params"],
@@ -298,10 +297,8 @@ if __name__ == "__main__":
             "model.py",
         ],
     )
-
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: '{device}'")
-
     # For video recording, otherwise None
     render_mode = "rgb_array" if args.record else None
     env = make_env(
@@ -315,29 +312,23 @@ if __name__ == "__main__":
             env,
             video_folder=args.record,
             name_prefix="training",
-            episode_trigger=lambda x: x % 90 == 0,
+            episode_trigger=lambda x: x % 100 == 0,
         )
     env = gym.wrappers.RecordEpisodeStatistics(env, buffer_length=100)
-
     obs_shape = env.observation_space.shape
     n_actions = env.action_space.n
-
     # 1. Initialize replay memory D to its capacity
     replay_memory = ExperienceReplay(parameters["replay_size"])
-
     expected_shape = (parameters["action_repeat"], 128, 64)
     assert obs_shape == expected_shape, f"Expected {expected_shape}, got {obs_shape}."
-
     # 2. Initialize action-value function Q with random weights
     policy_net = DQN(obs_shape, n_actions).to(device)
     # 3. Initialize target action-value function with weights of action-value function Q
     tgt_net = DQN(obs_shape, n_actions).to(device)
     tgt_net.load_state_dict(policy_net.state_dict())
-
     optimizer = torch.optim.Adam(
         policy_net.parameters(), lr=parameters["learning_rate"]
     )
-
     # Add Neptune logging
     npt_logger = NeptuneLogger(
         run=run,
@@ -351,17 +342,19 @@ if __name__ == "__main__":
     run[npt_logger.base_namespace]["hyperparameters"] = stringify_unsupported(
         parameters
     )
-
     agent = Agent(env, replay_memory)
-
     episode_c = 0
     crash_c = 0
     frame_idx = 0
     total_training_timer = time.time()
     best_mean_reward = None
-
     # 4. For each episode
-    while frame_idx < parameters["max_frames"]:
+    # FIXME remove underneath, only included for Lightning
+    max_training_time = 14 * 60 * 60  # 14 hours in seconds
+    while (
+        frame_idx < parameters["max_frames"]
+        and (time.time() - total_training_timer) < max_training_time
+    ):
         frame_idx += 1
         # 5. Initialize frame sequence and preprocessed sequence
         # 6. For each time step - done in `play_step` per `_reset`
@@ -399,7 +392,6 @@ if __name__ == "__main__":
         # Due to increment placement sync frames before loss calculation
         if frame_idx % parameters["sync_target_frames"] == 0:
             tgt_net.load_state_dict(policy_net.state_dict())
-
         optimizer.zero_grad()
         # 11. Sample random mini-batch of transitions from D
         batch = replay_memory.sample(parameters["batch_size"])
@@ -407,9 +399,12 @@ if __name__ == "__main__":
         # 13. Perform a GD step on (y - Q(s, a; \theta))^2
         loss_t.backward()
         optimizer.step()
-
+    # End of training
     record_time(total_training_timer)
+    torch.save(
+        policy_net.state_dict(),
+        parameters["env_name"] + f"-final_{frame_idx}.dat",
+    )
     run[npt_logger.base_namespace]["models"].upload_files("*.dat")
-    npt_logger.log_model("latest_model")  # TODO also locally?
     run.stop()
     env.close()
