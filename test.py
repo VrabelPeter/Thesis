@@ -22,7 +22,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "-r",
         "--record",
-        default="videos",
+        default="videos/testing",
         help="The path to the directory to record the episode, default=videos.",
     )
     args = parser.parse_args()
@@ -55,7 +55,7 @@ if __name__ == "__main__":
         episode_steps = 0
         episode_collision = info.get("crashed", False)
         done = episode_collision
-        while not done and total_steps < 10_000:
+        while not done:
             state_v = torch.tensor(np.expand_dims(obs, axis=0))
             with torch.no_grad():
                 q_vals = net(state_v).data.numpy()[0]
