@@ -87,7 +87,7 @@ if __name__ == "__main__":
     print(f"\nTest completed after {episode_count} episodes, {total_steps} steps")
     print(f"Average return: {np.mean(env.return_queue):.2f}")
     print(f"Average episode length: {np.mean(env.length_queue):.2f}")
-    print(f"Average episode time: {np.mean(env.time_queue)::.2f}s")
+    print(f"Average episode time: {np.mean(env.time_queue):.2f}s")
     print(f"Average episode speed: {np.mean(episode_speeds):.2f}")
     print(f"Total collisions: {total_collisions}")
     print(f"Collision rate: {total_collisions / episode_count:.2%}")
