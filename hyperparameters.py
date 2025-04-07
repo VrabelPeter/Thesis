@@ -23,13 +23,11 @@ publication_parameters.update(
         "epsilon_decay_last_frame": 1_000_000,
         "replay_start_size": 50_000,
         "noop_max": 30,
-        # TODO they say to run for 50M frames, but all or just those seen in training? count those gotten from env
         "max_frames": 50_000_000,
     }
 )
 
-# At the moment I am using hyperparams from the found thesis for comparison purposes!
-thesis_params = publication_parameters.copy()  # FIXME Does it use Adam?
+thesis_params = publication_parameters.copy()
 thesis_params["replay_size"] = 100_000
 thesis_params["learning_rate"] = 3e-3
 thesis_params["discount_factor"] = 0.99
@@ -40,16 +38,6 @@ thesis_params["epsilon_final"] = 0.04
 thesis_params["replay_start_size"] = 1_000
 thesis_params["batch_size"] = 64
 thesis_params["max_frames"] = 200_000
-
-# Establish baseline with random agent
-test_params = thesis_params.copy()
-test_params["replay_size"] = 10_000
-test_params["sync_target_frames"] = 1_000
-test_params["epsilon_decay_last_frame"] = 1  # Random agent
-test_params["replay_start_size"] = 1_000
-test_params["epsilon_final"] = 1.0  # Random agent
-test_params["max_frames"] = 100_000
-
 
 # Change only this line to switch between parameters
 parameters = thesis_params
