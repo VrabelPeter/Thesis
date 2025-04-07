@@ -42,6 +42,7 @@ def make_env(
     }
     env = gym.make(env_name, config=config, **kwargs)
     if video_folder is not None and record_frequency > 0:
+        print(f"Recording videos to '{video_folder}'")
         env = gym.wrappers.RecordVideo(
             env,
             video_folder,

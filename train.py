@@ -56,7 +56,7 @@ class Agent:
         self._reset()
 
     def _reset(self):
-        self.state, info = self.env.reset()
+        self.state, _ = self.env.reset()
         self.total_reward = 0.0
 
     @torch.no_grad()
@@ -197,9 +197,6 @@ def record_time(timer):
         A formatted string showing the total training duration in the format 'HHh MMm'.
     """
     total_time = int(time.time() - timer)
-    assert total_time < 24 * 60 * 60, (
-        f"Total training time exceeds 24 hours: {total_time}"
-    )
     print(f"Total training time: {time.strftime('%Hh %Mm', time.gmtime(total_time))}")
 
 
@@ -211,6 +208,7 @@ def log_metrics(
     episode_c: int,
     crash_c: int,
     epsilon: float,
+    speed_values: tt.List[float],
     info: dict,
 ):
     """Log episode metrics to the console and Neptune.
@@ -223,6 +221,7 @@ def log_metrics(
         episode_c: The current episode count.
         crash_c: The current crash count.
         epsilon: The current epsilon value.
+        speed_values: A list of speed values for the current episode.
         info: The `info` dictionary from the environment step.
     """
     episode_info = info["episode"]
@@ -230,6 +229,7 @@ def log_metrics(
     episode_length = episode_info["l"]  # Episode length in steps
     # Time elapsed since beginning of the episode
     episode_time = episode_info["t"]
+    episode_mean_speed = np.mean(speed_values) if speed_values else 0.0
     # Means of the last 100 episodes
     mean_return_100 = np.mean(env.return_queue)
     mean_length_100 = np.mean(env.length_queue)
@@ -240,9 +240,9 @@ def log_metrics(
     speed = episode_length / episode_time
 
     print(
-        f"{frame_idx}: done {episode_c} games, "
-        f"mean reward {mean_return_100:.3f}, "
-        f"eps {epsilon:.2f}, "
+        f"{frame_idx}: done {episode_c} games,",
+        f"mean reward {mean_return_100:.3f},",
+        f"eps {epsilon:.2f},",
         f"speed {speed:.2f} f/s,",
         f"crashes per episode {crash_rate:.2f}",
     )
@@ -250,6 +250,7 @@ def log_metrics(
     run[npt_logger.base_namespace]["metrics"].append(
         {
             "epsilon": epsilon,
+            "speed": speed,
             "total_crashes": crash_c,
             "crash_rate": crash_rate,
         }
@@ -268,7 +269,7 @@ def log_metrics(
             "length": episode_length,
             "time": episode_time,
             "crashed": info["crashed"],
-            "speed": speed,
+            "mean_speed": episode_mean_speed,
         },
         step=episode_c,
     )
@@ -277,10 +278,10 @@ def log_metrics(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser("Train DQN agent")
     parser.add_argument(
+        "-r",
         "--record",
         type=str,
         help="Record video of the training to the specified folder",
-        required=False,
     )
     args = parser.parse_args()
     # Assuming that credentials are set in the environment
@@ -304,17 +305,12 @@ if __name__ == "__main__":
     env = make_env(
         parameters["env_name"],
         m=parameters["agent_history_length"],
+        video_folder=args.record,
+        name_prefix="train",
+        record_frequency=100,
+        buffer_length=100,
         render_mode=render_mode,
     )
-    if args.record:
-        print(f"Recording videos to {args.record}")
-        env = gym.wrappers.RecordVideo(
-            env,
-            video_folder=args.record,
-            name_prefix="training",
-            episode_trigger=lambda x: x % 100 == 0,
-        )
-    env = gym.wrappers.RecordEpisodeStatistics(env, buffer_length=100)
     obs_shape = env.observation_space.shape
     n_actions = env.action_space.n
     # 1. Initialize replay memory D to its capacity
@@ -329,16 +325,7 @@ if __name__ == "__main__":
     optimizer = torch.optim.Adam(
         policy_net.parameters(), lr=parameters["learning_rate"]
     )
-    # Add Neptune logging
-    npt_logger = NeptuneLogger(
-        run=run,
-        model=policy_net,
-        # log_model_diagram=True,
-        # log_gradients=True,
-        # log_parameters=True,
-        # # FIXME underneath is maybe too high?
-        # log_freq=500,  # Fixed the error with time stamps being too close
-    )
+    npt_logger = NeptuneLogger(run=run, model=policy_net)
     run[npt_logger.base_namespace]["hyperparameters"] = stringify_unsupported(
         parameters
     )
@@ -348,13 +335,9 @@ if __name__ == "__main__":
     frame_idx = 0
     total_training_timer = time.time()
     best_mean_reward = None
+    speed_values = []
     # 4. For each episode
-    # FIXME remove underneath, only included for Lightning
-    max_training_time = 14 * 60 * 60  # 14 hours in seconds
-    while (
-        frame_idx < parameters["max_frames"]
-        and (time.time() - total_training_timer) < max_training_time
-    ):
+    while frame_idx < parameters["max_frames"]:
         frame_idx += 1
         # 5. Initialize frame sequence and preprocessed sequence
         # 6. For each time step - done in `play_step` per `_reset`
@@ -362,6 +345,7 @@ if __name__ == "__main__":
         reward, info = agent.play_step(policy_net, device, epsilon)
         if info["crashed"]:
             crash_c += 1  # Unsuccessful episode
+        speed_values.append(info["speed"])
         if reward is not None:
             episode_c += 1  # End of episode
             # Report progress
@@ -373,11 +357,12 @@ if __name__ == "__main__":
                 episode_c,
                 crash_c,
                 epsilon,
+                speed_values,
                 info,
             )
             mean_return_100 = np.mean(env.return_queue)
             if best_mean_reward is None or best_mean_reward < mean_return_100:
-                file_name = parameters["env_name"] + f"-best_{mean_return_100:.0f}.dat"
+                file_name = f"{parameters['env_name']}-best_{mean_return_100:.0f}.dat"
                 # Save model params
                 torch.save(policy_net.state_dict(), file_name)
                 if best_mean_reward is not None:
@@ -386,6 +371,7 @@ if __name__ == "__main__":
                         f"{best_mean_reward:.3f} -> {mean_return_100:.3f}"
                     )
                     best_mean_reward = mean_return_100
+            speed_values = []
         if len(replay_memory) < parameters["replay_start_size"]:
             continue
         # 14. Every C steps reset \theta' = \theta.
@@ -403,7 +389,7 @@ if __name__ == "__main__":
     record_time(total_training_timer)
     torch.save(
         policy_net.state_dict(),
-        parameters["env_name"] + f"-final_{frame_idx}.dat",
+        f"{parameters['env_name']}-final.dat",
     )
     run[npt_logger.base_namespace]["models"].upload_files("*.dat")
     run.stop()
