@@ -30,7 +30,6 @@ publication_parameters.update(
 thesis_params = publication_parameters.copy()
 thesis_params["replay_size"] = 100_000
 thesis_params["learning_rate"] = 3e-3
-thesis_params["discount_factor"] = 0.99
 thesis_params["gamma"] = 0.99
 thesis_params["sync_target_frames"] = 250
 thesis_params["epsilon_decay_last_frame"] = 24_000  # Should be 12% of max_frames
