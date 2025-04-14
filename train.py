@@ -43,20 +43,26 @@ def calc_eps(frame_idx):
 
 
 class Agent:
-    def __init__(self, env: gym.Env, mem_buffer: ExperienceReplay):
+    def __init__(self, env: gym.Env, mem_buffer: ExperienceReplay, initial_seed: int):
         """Initializes the agent.
 
         Args:
             `env`: The environment in which the agent will act.
             `mem_buffer`: The experience replay buffer.
+            `initial_seed`: The seed for the environment.
         """
         self.env = env
         self.mem_buffer = mem_buffer
         self.state: tt.Optional[np.ndarray] = None
-        self._reset()
+        self._reset(initial_seed)
 
-    def _reset(self):
-        self.state, _ = self.env.reset()
+    def _reset(self, seed: int = None):
+        """Reset the environment and agent state.
+        Args:
+            `seed`: The seed for the environment.
+                    Should only be provided when the agent is created.
+        """
+        self.state, _ = self.env.reset(seed=seed)
         self.total_reward = 0.0
 
     @torch.no_grad()
@@ -275,6 +281,19 @@ def log_metrics(
     )
 
 
+def set_seed(seed: int) -> None:
+    """Set the seed for reproducibility.
+    Args:
+        seed: The seed value to set.
+    """
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+    print(f"Seed set to {seed}")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser("Train DQN agent")
     parser.add_argument(
@@ -283,7 +302,15 @@ if __name__ == "__main__":
         type=str,
         help="Record video of the training to the specified folder",
     )
+    parser.add_argument(
+        "-s",
+        "--seed",
+        type=int,
+        default=42,
+        help="Random seed to use for reproducibility, default=42",
+    )
     args = parser.parse_args()
+    set_seed(args.seed)
     # Assuming that credentials are set in the environment
     run = neptune.init_run(
         tags=["Highway", "Thesis params"],
@@ -298,6 +325,7 @@ if __name__ == "__main__":
             "model.py",
         ],
     )
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: '{device}'")
     # For video recording, otherwise None
@@ -329,7 +357,8 @@ if __name__ == "__main__":
     run[npt_logger.base_namespace]["hyperparameters"] = stringify_unsupported(
         parameters
     )
-    agent = Agent(env, replay_memory)
+    run[npt_logger.base_namespace]["seed"] = args.seed
+    agent = Agent(env, replay_memory, args.seed)
     episode_c = 0
     crash_c = 0
     frame_idx = 0
@@ -389,7 +418,7 @@ if __name__ == "__main__":
     record_time(total_training_timer)
     torch.save(
         policy_net.state_dict(),
-        f"{parameters['env_name']}-final.dat",
+        f"{parameters['env_name']}-final_seed_{args.seed}.dat",
     )
     run[npt_logger.base_namespace]["models"].upload_files("*.dat")
     run.stop()
