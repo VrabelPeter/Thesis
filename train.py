@@ -291,7 +291,7 @@ if __name__ == "__main__":
         # Replace the `monitoring/<hash>/` pattern to make comparison easier
         monitoring_namespace="monitoring",
         source_files=[
-            "dqn.py",
+            "train.py",
             "hyperparameters.py",
             "wrappers.py",
             "experience_replay.py",
