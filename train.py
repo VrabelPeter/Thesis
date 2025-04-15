@@ -343,7 +343,7 @@ if __name__ == "__main__":
     n_actions = env.action_space.n
     # 1. Initialize replay memory D to its capacity
     replay_memory = ExperienceReplay(parameters["replay_size"])
-    expected_shape = (parameters["action_repeat"], 128, 64)
+    expected_shape = (parameters["agent_history_length"], 128, 64)
     assert obs_shape == expected_shape, f"Expected {expected_shape}, got {obs_shape}."
     # 2. Initialize action-value function Q with random weights
     policy_net = DQN(obs_shape, n_actions).to(device)
