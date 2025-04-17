@@ -1,4 +1,5 @@
 import argparse
+import collections
 
 import gymnasium as gym
 import highway_env
@@ -51,29 +52,45 @@ if __name__ == "__main__":
     episode_count = 0
     total_collisions = 0
     episode_speeds = []
+    total_action_counts = collections.defaultdict(int)
     while total_steps < STEP_LIMIT:
         obs, info = env.reset()
         episode_collision = info["crashed"]
         done = episode_collision
         speed_values = []
-        while not done:
+        episode_action_counts = collections.defaultdict(int)
+        current_episode_steps = 0
+        while not done and total_steps < STEP_LIMIT:
             state_v = torch.tensor(np.expand_dims(obs, axis=0))
             with torch.no_grad():
                 q_vals = net(state_v).data.numpy()[0]
             action = int(np.argmax(q_vals))
+            episode_action_counts[action] += 1
+            total_action_counts[action] += 1
             obs, reward, is_done, is_trunc, info = env.step(action)
             done = is_done or is_trunc
             if info["crashed"]:
                 episode_collision = True
             speed_values.append(info["speed"])
             total_steps += 1
+            current_episode_steps += 1
         # Episode finished
-        episode_info = info.get("episode")
+        episode_info = info.get(
+            "episode",
+            {  # Handle potential missing info if truncated early
+                "l": current_episode_steps,
+                "r": np.nan,
+                "t": np.nan,
+            },
+        )
         avg_speed = np.mean(speed_values) if speed_values else 0.0
         episode_speeds.append(avg_speed)
         if episode_collision:
             total_collisions += 1
         episode_count += 1
+        action_counts_str = ", ".join(
+            [f"Action {k}: {v}" for k, v in sorted(episode_action_counts.items())]
+        )
         print(
             f"Total steps: {total_steps}:",
             f"Episode: {episode_count},",
@@ -82,6 +99,7 @@ if __name__ == "__main__":
             f"Time: {episode_info['t']:.2f}s,",
             f"Avg Speed: {avg_speed:.2f},",
             f"Collision: {episode_collision}",
+            f"Action Counts: [{action_counts_str}]",
         )
     # Test completed
     print(f"\nTest completed after {episode_count} episodes, {total_steps} steps")
@@ -91,5 +109,8 @@ if __name__ == "__main__":
     print(f"Average episode speed: {np.mean(episode_speeds):.2f}")
     print(f"Total collisions: {total_collisions}")
     print(f"Collision rate: {total_collisions / episode_count:.2%}")
+    print("\nTotal Action Counts Across All Steps:")
+    for action, count in sorted(total_action_counts.items()):
+        print(f"  Action {action}: {count} ({(count / total_steps) * 100:.2f}%)")
     env.close()
     print(f"\nRecorded videos saved to {args.record}")
