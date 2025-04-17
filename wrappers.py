@@ -18,9 +18,9 @@ def make_env(
     Args:
         env_name (str): The name of the environment to create.
         m (int): The number of frames to stack.
-        video_folder (str): Folder to save videos.
+        video_folder (str): Folder to save videos. If None, videos are not recorded.
         name_prefix (str): Prefix for video file names.
-        record_frequency (int): How often to record videos.
+        record_frequency (int): How often to record videos. If 0, no videos are recorded.
         buffer_length (int): Length of the buffer for episode statistics.
         **kwargs: Additional keyword arguments to pass to the environment.
 
