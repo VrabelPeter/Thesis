@@ -325,7 +325,6 @@ if __name__ == "__main__":
             "model.py",
         ],
     )
-    run["seed"] = args.seed
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: '{device}'")
     # For video recording, otherwise None
