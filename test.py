@@ -36,7 +36,7 @@ if __name__ == "__main__":
         m=parameters["agent_history_length"],
         video_folder=args.record,
         name_prefix="test",
-        record_frequency=10,
+        record_frequency=1,
         buffer_length=STEP_LIMIT,
         render_mode="rgb_array",
     )
