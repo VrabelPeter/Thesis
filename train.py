@@ -1,4 +1,6 @@
 import argparse
+import glob
+import os
 import random
 import time
 import typing as tt
@@ -422,3 +424,13 @@ if __name__ == "__main__":
     run[npt_logger.base_namespace]["models"].upload_files("*.dat")
     run.stop()
     env.close()
+    print("Deleting model files...")
+    deleted_count = 0
+    for f in glob.glob("*.dat"):
+        try:
+            os.remove(f)
+            print(f"Deleted: {f}")
+            deleted_count += 1
+        except OSError as e:
+            print(f"Error deleting file {f}: {e}")
+    print(f"Deleted {deleted_count} model files.")
