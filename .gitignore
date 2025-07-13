@@ -175,3 +175,7 @@ cython_debug/
 
 # Ignore model files
 *.dat
+
+# Ignore my directories
+.ignore/
+.videos/
