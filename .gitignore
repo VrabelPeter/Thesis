@@ -177,5 +177,5 @@ cython_debug/
 *.dat
 
 # Ignore my directories
-.ignore/
-.videos/
+ignore/
+videos/
