@@ -1,3 +1,4 @@
+# Tested with Python 3.11
 gymnasium[other]
 gymnasium==1.1.1
 highway-env==1.10.1
