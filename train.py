@@ -197,7 +197,7 @@ if __name__ == "__main__":
             "Publication params",
             "SB3",
         ],
-        dependencies="requirements_sb3.txt",
+        dependencies="requirements.txt",
         # Replace the `monitoring/<hash>/` pattern to make comparison easier
         monitoring_namespace="monitoring",
         source_files=[
