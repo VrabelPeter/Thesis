@@ -267,8 +267,8 @@ if __name__ == "__main__":
         callback_on_new_best=VideoRecordingCallback(args.record),
         n_eval_episodes=100,  # Want optimal behavior for at least 80%
         eval_freq=250_000,  # Totals 120 evaluations
-        best_model_save_path=MODELS_DIR,
         log_path=TS_LOG_DIR,
+        best_model_save_path=f"{MODELS_DIR}/{args.seed}",
     )
     custom_callback = CustomCallback()
     callback_list = CallbackList([eval_callback, custom_callback])
@@ -286,7 +286,7 @@ if __name__ == "__main__":
         print("Training interrupted by user")
 
     # Save final model
-    final_model_path = f"sb3/models/{parameters['env_name']}-sb3-final_seed_{args.seed}"
+    final_model_path = f"models/{parameters['env_name']}-final_seed_{args.seed}"
     model.save(final_model_path)  # Save the agent
     print(f"Final model saved to {final_model_path}")
     print(f"Best model saved in {MODELS_DIR}")
