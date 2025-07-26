@@ -194,16 +194,16 @@ if __name__ == "__main__":
     run = neptune.init_run(
         tags=[
             parameters["env_name"],
-            "Publication params with smaller replay buffer",
+            "Publication params",
             "SB3",
         ],
-        dependencies="sb3/requirements_sb3.txt",  # TODO add the integration
+        dependencies="requirements_sb3.txt",
         # Replace the `monitoring/<hash>/` pattern to make comparison easier
         monitoring_namespace="monitoring",
         source_files=[
-            "train_sb3.py",
             "hyperparameters.py",
             "wrappers.py",
+            "train.py",
         ],
     )
     enable_tensorboard_logging(run)
@@ -265,7 +265,7 @@ if __name__ == "__main__":
     eval_callback = EvalCallback(
         eval_env,
         callback_on_new_best=VideoRecordingCallback(args.record),
-        n_eval_episodes=10,  # Want optimal behavior for at least 80%
+        n_eval_episodes=100,  # Want optimal behavior for at least 80%
         eval_freq=250_000,  # Totals 120 evaluations
         best_model_save_path=MODELS_DIR,
         log_path=TS_LOG_DIR,
