@@ -82,11 +82,11 @@ class CustomCallback(BaseCallback):
             ep_metrics = info.get("episode_metrics", {})
             if ep_metrics:
                 self.mean_100_speeds.append(ep_metrics.get("mean_speed", 0))
-                self.crashes_count += int(ep_metrics.get("crashed", False))
+                self.crashes_count += ep_metrics.get("crashed", 0)
                 if self.verbose >= 1:
                     print(
                         f"Episode finished: mean speed = {np.mean(self.mean_100_speeds):.2f}, "
-                        f"crashed = {ep_metrics.get('crashed', False)}"
+                        f"crashed = {ep_metrics.get('crashed', 0)}"
                     )
 
                 if self.ep_c % 100 == 0:

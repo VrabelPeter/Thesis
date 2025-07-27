@@ -92,6 +92,7 @@ class CustomMetricsWrapper(gym.Wrapper):
                 "mean_speed": np.mean(self.episode_speeds)
                 if self.episode_speeds
                 else 0,
+                "crashed": int(info.get("crashed", False)),
             }
         return obs, reward, terminated, truncated, info
 
